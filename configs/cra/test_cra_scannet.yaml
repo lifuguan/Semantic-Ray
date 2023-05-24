@@ -1,4 +1,4 @@
-name: test_cra_scannet
+name: ft_cra_scannet_scene0376
 
 # network
 init_net_type: depth

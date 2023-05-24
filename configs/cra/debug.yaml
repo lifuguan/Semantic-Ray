@@ -1,9 +1,9 @@
-name: train_wandb
+name: debug
 
 # network
 init_net_type: depth
 use_hierarchical_sampling: true
-use_depth_loss: false
+use_depth_loss: true
 dist_decoder_cfg:
   use_vis: true
 fine_dist_decoder_cfg:
@@ -28,7 +28,7 @@ fine_agg_net_cfg: {
 }
 
 # loss
-loss: [render, semantic]
+loss: [render, semantic, depth]
 render_loss_scale: 0.75
 semantic_loss_scale: 0.25
 val_metric: [psnr_ssim, vis_img, iou, vis_sem]

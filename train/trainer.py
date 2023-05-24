@@ -12,13 +12,15 @@ from pprint import pprint
 from dataset.train_dataset import RendererDataset
 from network.loss import name2loss
 from network.renderer import Renderer
+from network.metrics import compute_psnr, img2psnr
 from train.lr_common_manager import name2lr_manager
 from network.metrics import name2metrics
 from train.train_tools import to_cuda, Logger, reset_learning_rate, MultiGPUWrapper, DummyLoss
 from train.train_valid import ValidationEvaluator
 from utils.dataset_utils import simple_collate_fn, dummy_collate_fn
+from utils.base_utils import color_map_backward
 
-
+import wandb
 class Trainer:
     default_cfg = {
         "optimizer_type": 'adam',
@@ -110,15 +112,30 @@ class Trainer:
     def __init__(self, cfg):
         self.cfg = {**self.default_cfg, **cfg}
         self.model_name = cfg['name']
-        self.model_dir = os.path.join('data/model', cfg['name'])
+        self.model_dir = os.path.join('out', cfg['name'])
         if not os.path.exists(self.model_dir):
             os.mkdir(self.model_dir)
         
         self.pth_fn = os.path.join(self.model_dir, 'model.pth')
         self.best_pth_fn = os.path.join(self.model_dir, 'model_best.pth')
-        self.database_statistics = {}
+        self.database_statistics = {} 
+
+
 
     def run(self):
+        if self.cfg['name'] != 'debug':
+            wandb.init(
+                # set the wandb project where this run will be logged
+                entity="lifuguan",
+                project="General-NeRF",
+                name=self.cfg['name'],
+                
+                # track hyperparameters and run metadata
+                config={
+                "semantic_loss_scale": self.cfg['semantic_loss_scale'],
+                "render_loss_scale": self.cfg['render_loss_scale'],
+                }
+            )
         self._init_dataset()
         self._init_network()
         self._init_logger()
@@ -131,8 +148,6 @@ class Trainer:
             best_para, start_step = self._load_model()
         train_iter = iter(self.train_set)
 
-        pbar = tqdm(total=self.cfg['total_step'], bar_format='{r_bar}')
-        pbar.update(start_step)
         for step in range(start_step, self.cfg['total_step']):
             try:
                 train_data = next(train_iter)
@@ -152,7 +167,7 @@ class Trainer:
             self.train_network.zero_grad()
 
             log_info = {}
-            outputs = self.train_network(train_data)
+            outputs = self.train_network(train_data)    # 载入训练数据
             for loss in self.train_losses:
                 loss_results = loss(outputs, train_data, step)
                 for k, v in loss_results.items():
@@ -194,14 +209,28 @@ class Trainer:
             if (step+1) % self.cfg['save_interval'] == 0:
                 self._save_model(step+1, best_para, self.pth_fn.replace('.pth', f'_step{step+1}.pth'))
 
-            if 'max_grad_norm' in self.cfg:
-                pbar.set_postfix(loss=loss.item(), lr=lr, grad_norm=norm.item())
-            else:
-                pbar.set_postfix(loss=loss.item(), lr=lr)
-            pbar.update(1)
+            logstr = "{} step: {}".format(self.cfg['name'], step)
+            for k in log_info.keys():
+                logstr += " {}: {:.6f}".format(k, log_info[k].item())
+            
+            
+            if (step+1) % self.cfg['i_print'] == 0:
+                metric_info = {}
+                metric_info['train/compute_psnr'] = compute_psnr( 
+                    color_map_backward(outputs['pixel_colors_gt'][0].cpu().numpy()), 
+                    color_map_backward(outputs['pixel_colors_nr'][0].cpu().detach().numpy()))
+                metric_info['train/img2psnr'] = img2psnr( 
+                    outputs['pixel_colors_gt'][0], 
+                    outputs['pixel_colors_nr'][0])
+                for k in metric_info.keys():
+                    logstr += " {}: {:.6f}".format(k, metric_info[k].item())
+                if self.cfg['name'] != 'debug':
+                    wandb.log(metric_info)
+            if self.cfg['name'] != 'debug':
+                wandb.log(log_info)
+            print(logstr)
             del loss, log_info
 
-        pbar.close()
         
     def eval(self, model_path):
         self._init_dataset()

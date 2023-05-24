@@ -2,3 +2,5 @@ data
 exps
 __pycache__
 .vscode
+out
+wandb

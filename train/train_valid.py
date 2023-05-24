@@ -18,7 +18,7 @@ class ValidationEvaluator:
         model.eval()
         eval_results={}
         begin=time.time()
-        for data_i, data in tqdm(enumerate(eval_dataset)):
+        for data_i, data in enumerate(eval_dataset):
             data = to_cuda(data)
             data['eval']=True
             data['step']=step

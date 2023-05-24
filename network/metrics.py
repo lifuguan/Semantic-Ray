@@ -14,6 +14,25 @@ from utils.draw_utils import concat_images_list
 
 np.seterr(invalid='ignore')
 
+TINY_NUMBER = 1e-6  # float32 only has 7 decimal digits precision
+mse2psnr = lambda x: -10.0 * np.log(x + TINY_NUMBER) / np.log(10.0)
+def img2mse(x, y, mask=None):
+    """
+    :param x: img 1, [(...), 3]
+    :param y: img 2, [(...), 3]
+    :param mask: optional, [(...)]
+    :return: mse score
+    """
+    if mask is None:
+        return torch.mean((x - y) * (x - y))
+    else:
+        return torch.sum((x - y) * (x - y) * mask.unsqueeze(-1)) / (
+            torch.sum(mask) * x.shape[-1] + TINY_NUMBER
+        )
+
+
+def img2psnr(x, y, mask=None):
+    return mse2psnr(img2mse(x, y, mask).item())
 
 def compute_psnr(img_gt, img_pr, use_vis_scores=False, vis_scores=None, vis_scores_thresh=1.5):
     if use_vis_scores:
@@ -25,7 +44,7 @@ def compute_psnr(img_gt, img_pr, use_vis_scores=False, vis_scores=None, vis_scor
 
     img_gt = img_gt.reshape([-1, 3]).astype(np.float32)
     img_pr = img_pr.reshape([-1, 3]).astype(np.float32)
-    mse = np.mean((img_gt - img_pr) ** 2, 0)
+    mse = np.mean((img_gt - img_pr) ** 2)
     mse = np.mean(mse)
     psnr = 10 * np.log10(255 * 255 / mse)
     return psnr
@@ -65,7 +84,7 @@ class PSNR_SSIM(Loss):
 
         psnr = compute_psnr(rgbs_gt, rgbs_pr)
         ssim = structural_similarity(
-            rgbs_gt, rgbs_pr, win_size=11, channel_axis=-1, data_range=255)
+            rgbs_gt, rgbs_pr, win_size=11, channel_axis=-1, data_range=255, multichannel=True)
         outputs = {
             'psnr_nr': torch.tensor([psnr], dtype=torch.float32),
             'ssim_nr': torch.tensor([ssim], dtype=torch.float32),
@@ -80,7 +99,7 @@ class PSNR_SSIM(Loss):
                 rgbs_other = color_map_backward(rgbs_other)
                 psnr = compute_psnr(rgbs_gt, rgbs_other)
                 ssim = structural_similarity(
-                    rgbs_gt, rgbs_other, win_size=11, channel_axis=-1, data_range=255)
+                    rgbs_gt, rgbs_other, win_size=11, channel_axis=-1, data_range=255, multichannel=True)
                 outputs[f'psnr_{suffix}'] = torch.tensor(
                     [psnr], dtype=torch.float32)
                 outputs[f'ssim_{suffix}'] = torch.tensor(

@@ -222,7 +222,7 @@ class BaseRenderer(nn.Module):
                 torch.cat([coarse_render_info['depth'], fine_depth], -1), -1)[0]
         else:
             que_depth = torch.sort(fine_depth, -1)[0]
-        outputs = self.render_by_depth(
+        outputs = self.render_by_depth(    # 在这里接入聚合网络
             que_depth, que_imgs_info, ref_imgs_info, is_train, True)
         return outputs
 
@@ -230,7 +230,7 @@ class BaseRenderer(nn.Module):
         # [qn,rn,dn]
         que_depth, _ = sample_depth(
             que_imgs_info['depth_range'], que_imgs_info['coords'], self.cfg['depth_sample_num'], False)
-        outputs = self.render_by_depth(
+        outputs = self.render_by_depth(   # 在这里接入聚合网络
             que_depth, que_imgs_info, ref_imgs_info, is_train, False)
         if self.cfg['use_hierarchical_sampling']:
             coarse_render_info = {'depth': que_depth,
@@ -244,7 +244,7 @@ class BaseRenderer(nn.Module):
     def render(self, que_imgs_info, ref_imgs_info, is_train):
         ref_img_feats = self.image_encoder(ref_imgs_info['imgs'])
         ref_imgs_info['img_feats'] = ref_img_feats
-        ref_imgs_info['ray_feats'] = self.vis_encoder(
+        ref_imgs_info['ray_feats'] = self.vis_encoder(   # 把init的特征再一次融合
             ref_imgs_info['ray_feats'], ref_img_feats)
 
         if is_train and self.cfg['use_self_hit_prob']:

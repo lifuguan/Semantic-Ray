@@ -148,8 +148,6 @@ class RendererDataset(Dataset):
                     database = parse_database_name(database_scene_name)
                 else: break
             que_id = np.random.choice(ref_ids)
-            if database.database_name.startswith('real_estate'):
-                que_id, ref_ids = select_train_ids_for_real_estate(ref_ids)
         else:
             database = self.database
             que_id, ref_ids = self.que_ids[index], self.ref_ids

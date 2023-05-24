@@ -26,6 +26,7 @@ fine_agg_net_cfg: {
   ptrans_first: false,
   sem_only: true,
 }
+i_print: 10
 
 # loss
 loss: [render, semantic]
@@ -38,7 +39,7 @@ use_dr_fine_loss: false
 use_nr_fine_loss: true
 
 # lr
-load_pretrain: data/model/train_cra_scannet/model_best.pth
+load_pretrain: out/train_wandb/model_best.pth
 total_step: 50000
 val_interval: 2000
 save_interval: 2000
