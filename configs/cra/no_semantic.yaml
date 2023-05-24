@@ -1,5 +1,6 @@
-name: train_with_pretrain
+name: NeuRay_no_semantic
 
+agg_net_type: no_semantic
 # network
 init_net_type: depth
 use_hierarchical_sampling: true
@@ -9,7 +10,7 @@ dist_decoder_cfg:
 fine_dist_decoder_cfg:
   use_vis: true
 
-render_label: true
+render_label: false
 num_classes: 20
 ignore_label: 20
 agg_net_cfg: {
@@ -28,11 +29,11 @@ fine_agg_net_cfg: {
 }
 
 # loss
-loss: [render, semantic, depth]
-render_loss_scale: 0.75
-semantic_loss_scale: 0.25
-val_metric: [psnr_ssim, vis_img, iou, vis_sem]
-key_metric_name: miou
+loss: [render]
+render_loss_scale: 1.0
+semantic_loss_scale: 0.0
+val_metric: [psnr_ssim, vis_img]
+key_metric_name: psnr_nr
 use_dr_loss: false
 use_dr_fine_loss: false
 use_nr_fine_loss: true
