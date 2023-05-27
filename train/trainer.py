@@ -78,6 +78,13 @@ class Trainer:
             for param in self.network.agg_net.agg_impl.out_geometry_fc.parameters():
                 param.requires_grad = True
         
+        # 只训练maskformer分支
+        if 'is_train_semantic' in self.cfg and self.cfg['is_train_semantic'] is True:
+            for param in self.network.parameters():
+                param.requires_grad = False  
+            for param in self.network.semantic_branch.parameters():
+                param.requires_grad = True
+        
         # loss
         self.val_losses = []
         for loss_name in self.cfg['loss']:
@@ -174,9 +181,13 @@ class Trainer:
                     log_info[k] = v
 
             loss = 0
+            for k, v in outputs.items():
+                if k.startswith('loss'):
+                    log_info[k] = v
             for k, v in log_info.items():
                 if k.startswith('loss'):
                     loss = loss+torch.mean(v)
+            log_info['loss_all'] = loss
 
             loss.backward()
             if 'max_grad_norm' in self.cfg:

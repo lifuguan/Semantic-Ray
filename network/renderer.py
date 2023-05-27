@@ -8,6 +8,14 @@ from network.ops import ResUNetLight
 from network.vis_encoder import name2vis_encoder
 from network.render_ops import *
 
+from network.mask_former_modeling import MaskFormer
+
+from detectron2.checkpoint import DetectionCheckpointer
+from detectron2.structures import Instances
+from detectron2.config import get_cfg
+from detectron2.projects.deeplab import add_deeplab_config
+from detectron2.modeling import build_model
+from network.mask_former_config import add_mask_former_config
 
 class BaseRenderer(nn.Module):
     base_cfg = {
@@ -56,8 +64,28 @@ class BaseRenderer(nn.Module):
                 self.cfg['fine_dist_decoder_cfg'])
             self.fine_agg_net = name2agg_net[self.cfg['agg_net_type']](
                 self.cfg['fine_agg_net_cfg'])
+            
+        self.is_train_semantic = cfg['is_train_semantic']
+        if self.is_train_semantic is True:
+            cfg = self.mask_former_setup(cfg['mask_fromer_config_file'])
+            self.semantic_branch = build_model(cfg)
+            DetectionCheckpointer(self.semantic_branch, save_dir='out/debug').resume_or_load(
+                'model_zoo/maskformer_final.pkl', resume=False)
 
-
+    def mask_former_setup(self, mask_fromer_config_file):
+        """
+        Create configs and perform basic setups.
+        """
+        semantic_cfg = get_cfg()
+        # for poly lr schedule
+        add_deeplab_config(semantic_cfg)
+        add_mask_former_config(semantic_cfg)
+        semantic_cfg.merge_from_file(mask_fromer_config_file)
+        semantic_cfg.merge_from_list([])
+        semantic_cfg.freeze()
+        # Setup logger for "mask_former" module
+        return semantic_cfg
+    
     def predict_proj_ray_prob(self, prj_dict, ref_imgs_info, que_dists, is_fine):
         rfn, qn, rn, dn, _ = prj_dict['mask'].shape
         # decode ray prob
@@ -357,6 +385,32 @@ class Renderer(BaseRenderer):
         ) if 'src_imgs_info' in data else None
         render_outputs = self.render_call(
             que_imgs_info, ref_imgs_info, is_train, src_imgs_info)
+        
+        if self.is_train_semantic is True:
+            sem_seg_gt = render_outputs['pixel_label_gt'].reshape(240, 320).detach().long()
+            instances = Instances((240, 320))
+            classes = sem_seg_gt.unique()
+            classes = classes[classes != self.cfg['ignore_label']]
+            masks = []
+            for class_id in classes:
+                masks.append(sem_seg_gt == class_id)
+            instances.gt_classes = classes
+
+            if len(masks) == 0:
+                # Some image does not have annotation (all ignored)
+                instances.gt_masks = torch.zeros((0, sem_seg_gt.shape[-2], sem_seg_gt.shape[-1]))
+            else:
+                instances.gt_masks = torch.stack(masks)
+            
+            batch_input ={
+                "image": render_outputs['pixel_colors_gt'].reshape(240, 320, 3).permute(2,0,1),
+                "sem_seg": sem_seg_gt,
+                "instances": instances
+            }
+            semantic_output = self.semantic_branch([batch_input])
+
+            render_outputs.update(semantic_output)
+
         if (self.cfg['use_depth_loss'] and 'true_depth' in ref_imgs_info) or (not is_train):
             render_outputs.update(
                 self.predict_mean_for_depth_loss(ref_imgs_info))

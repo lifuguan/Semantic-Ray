@@ -1,5 +1,6 @@
 name: debug
 
+agg_net_type: no_semantic
 # network
 init_net_type: depth
 use_hierarchical_sampling: true
@@ -9,7 +10,7 @@ dist_decoder_cfg:
 fine_dist_decoder_cfg:
   use_vis: true
 
-render_label: true
+render_label: false
 num_classes: 20
 ignore_label: 20
 agg_net_cfg: {
@@ -28,9 +29,9 @@ fine_agg_net_cfg: {
 }
 
 # loss
-loss: [render, semantic, depth]
-render_loss_scale: 0.75
-semantic_loss_scale: 0.25
+loss: [render]
+render_loss_scale: 1.0
+semantic_loss_scale: 0.0
 val_metric: [psnr_ssim, vis_img, iou, vis_sem]
 key_metric_name: miou
 use_dr_loss: false
@@ -38,11 +39,11 @@ use_dr_fine_loss: false
 use_nr_fine_loss: true
 
 # lr
-# load_pretrain: data/model/neuray_gen_depth/model_best.pth
+load_pretrain: out/train_with_maskformer/model_step20000.pth
 total_step: 600000
-val_interval: 500
+val_interval: 600000
 i_print: 10
-save_interval: 5000
+save_interval: 10000
 lr_type: exp_decay
 optimizer_type: adam
 max_grad_norm: 10
@@ -61,6 +62,7 @@ train_dataset_cfg:
   train_database_types: ['scannet']
   aug_pixel_center_sample: true
   train_ray_num: 1024
+  is_train_semantic: true   # for maskformer training
 val_set_list: configs/scannetv2_val_split.txt
 
 semantic_color_map: [
@@ -86,3 +88,8 @@ semantic_color_map: [
   [82, 84, 163],    # otherfurn
   [248, 166, 116],  # invalid
 ]
+
+# use MaskFormer
+
+is_train_semantic: true
+mask_fromer_config_file: configs/mask_former/maskformer_R50.yaml

@@ -3,7 +3,8 @@ import csv
 from collections import OrderedDict
 
 import torch
-from torch.utils.tensorboard import SummaryWriter
+# from torch.utils.tensorboard import SummaryWriter
+from tensorboardX import SummaryWriter
 import numpy as np
 import torch.nn as nn
 
