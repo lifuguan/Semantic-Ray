@@ -1,4 +1,4 @@
-name: train_with_maskformer
+name: train_with_semantic_fpn
 
 agg_net_type: no_semantic
 # network
@@ -29,9 +29,9 @@ fine_agg_net_cfg: {
 }
 
 # loss
-loss: [render]
-render_loss_scale: 1.0
-semantic_loss_scale: 0.0
+loss: [render, semantic]
+render_loss_scale: 0.75
+semantic_loss_scale: 0.25
 val_metric: [psnr_ssim, vis_img, iou, vis_sem]
 key_metric_name: miou
 use_dr_loss: false
@@ -92,6 +92,7 @@ semantic_color_map: [
 # use MaskFormer
 
 is_train_semantic: true
-semantic_config_file: configs/mask_former/maskformer_R50.yaml
+# semantic_config_file: configs/mask_former/maskformer_R50.yaml
+semantic_config_file: configs/mask_former/semantic_fpn_R50.yaml
 
 ray_batch_num: 25600

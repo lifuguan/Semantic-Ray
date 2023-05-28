@@ -9,13 +9,14 @@ from network.vis_encoder import name2vis_encoder
 from network.render_ops import *
 
 from network.mask_former_modeling import MaskFormer
+from network.semantic_fpn import SemanticFPN
 
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.structures import Instances
 from detectron2.config import get_cfg
 from detectron2.projects.deeplab import add_deeplab_config
 from detectron2.modeling import build_model
-from network.mask_former_config import add_mask_former_config
+from network.semantic_config import add_mask_former_config, add_semantic_fpn_config
 
 class BaseRenderer(nn.Module):
     base_cfg = {
@@ -67,20 +68,23 @@ class BaseRenderer(nn.Module):
             
         self.is_train_semantic = cfg['is_train_semantic']
         if self.is_train_semantic is True:
-            cfg = self.mask_former_setup(cfg['mask_fromer_config_file'])
+            cfg = self.semantic_branch_setup(cfg['semantic_config_file'])
             self.semantic_branch = build_model(cfg)
             DetectionCheckpointer(self.semantic_branch, save_dir='out/debug').resume_or_load(
                 'model_zoo/maskformer_final.pkl', resume=False)
 
-    def mask_former_setup(self, mask_fromer_config_file):
+    def semantic_branch_setup(self, semantic_config_file):
         """
         Create configs and perform basic setups.
         """
         semantic_cfg = get_cfg()
         # for poly lr schedule
         add_deeplab_config(semantic_cfg)
-        add_mask_former_config(semantic_cfg)
-        semantic_cfg.merge_from_file(mask_fromer_config_file)
+        if 'maskformer' in semantic_config_file:
+            add_mask_former_config(semantic_cfg)
+        elif 'semantic_fpn' in semantic_config_file:
+            add_semantic_fpn_config(semantic_cfg)
+        semantic_cfg.merge_from_file(semantic_config_file)
         semantic_cfg.merge_from_list([])
         semantic_cfg.freeze()
         # Setup logger for "mask_former" module

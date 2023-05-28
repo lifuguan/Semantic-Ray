@@ -9,5 +9,6 @@ CUDA_VISIBLE_DEVICES=0 python run_training.py --config configs/cra/no_semantic.y
 CUDA_VISIBLE_DEVICES=2 python run_training.py --config configs/cra/ft_cra_scannet_scene0376.yaml
 
 CUDA_VISIBLE_DEVICES=2 python run_training.py --config configs/cra/train_with_maskformer.yaml
+CUDA_VISIBLE_DEVICES=1 python run_training.py --config configs/cra/train_with_semantic_fpn.yaml
 
 export PYTHONPATH="${PYTHONPATH}:$(pwd)"

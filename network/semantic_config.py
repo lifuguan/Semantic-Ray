@@ -7,23 +7,6 @@ def add_mask_former_config(cfg):
     """
     Add config for MASK_FORMER.
     """
-    # data config
-    # select the dataset mapper
-    cfg.INPUT.DATASET_MAPPER_NAME = "mask_former_semantic"
-    # Color augmentation
-    cfg.INPUT.COLOR_AUG_SSD = False
-    # We retry random cropping until no single category in semantic segmentation GT occupies more
-    # than `SINGLE_CATEGORY_MAX_AREA` part of the crop.
-    cfg.INPUT.CROP.SINGLE_CATEGORY_MAX_AREA = 1.0
-    # Pad image and segmentation GT in dataset mapper.
-    cfg.INPUT.SIZE_DIVISIBILITY = -1
-
-    # solver config
-    # weight decay on embedding
-    cfg.SOLVER.WEIGHT_DECAY_EMBED = 0.0
-    # optimizer
-    cfg.SOLVER.OPTIMIZER = "ADAMW"
-    cfg.SOLVER.BACKBONE_MULTIPLIER = 0.1
 
     # mask_former model config
     cfg.MODEL.MASK_FORMER = CN()
@@ -84,3 +67,8 @@ def add_mask_former_config(cfg):
     cfg.MODEL.SWIN.APE = False
     cfg.MODEL.SWIN.PATCH_NORM = True
     cfg.MODEL.SWIN.OUT_FEATURES = ["res2", "res3", "res4", "res5"]
+
+
+def add_semantic_fpn_config(cfg):
+    # pixel decoder config
+    cfg.MODEL.SEM_SEG_HEAD.MASK_DIM = 256

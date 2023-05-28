@@ -1,0 +1,20 @@
+MODEL:
+  META_ARCHITECTURE: "SemanticFPN"
+  WEIGHTS: "model_zoo/R-50.pkl"
+  RESNETS:
+    DEPTH: 50
+    OUT_FEATURES: ["res2", "res3", "res4", "res5"]
+  BACKBONE:
+    NAME: "build_resnet_fpn_backbone"
+  SEM_SEG_HEAD:
+    NAME: "NeRFSemSegFPNHead"
+    IN_FEATURES: ["p2", "p3", "p4", "p5"]
+    IGNORE_VALUE: 65535
+    NUM_CLASSES: 20
+    COMMON_STRIDE: 4  # not used, hard-coded
+    LOSS_WEIGHT: 1.0
+    CONVS_DIM: 256
+    MASK_DIM: 256
+    NORM: "GN"
+  FPN:
+    IN_FEATURES: ["res2", "res3", "res4", "res5"]
