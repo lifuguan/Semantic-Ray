@@ -205,8 +205,11 @@ class Trainer:
                     val_results_cur, val_para_cur = self.val_evaluator(
                         self.network, self.val_losses + self.val_metrics, self.val_set_list[vi], step,
                         self.model_name, val_set_name=self.val_set_names[vi])
+                    # for k, v in val_results_cur.items():
+                    #     val_results[f'{self.val_set_names[vi]}-{k}'] = v
                     for k, v in val_results_cur.items():
-                        val_results[f'{self.val_set_names[vi]}-{k}'] = v
+                        scene_name = self.val_set_names[vi].split('/')[1]
+                        val_results[f'val/{scene_name}-{k}'] = v
                     val_para += val_para_cur
                 val_para /= len(self.val_set_list)
                 if val_para > best_para:
@@ -214,6 +217,8 @@ class Trainer:
                         f'New best model {self.cfg["key_metric_name"]}: {val_para:.5f} previous {best_para:.5f}')
                     best_para = val_para
                     self._save_model(step+1, best_para, self.best_pth_fn)
+                if self.cfg['name'] != 'debug':
+                    wandb.log(val_results)
                 self._log_data(val_results, step+1, 'val')
                 del val_results, val_para, val_para_cur, val_results_cur
 
@@ -227,9 +232,9 @@ class Trainer:
             
             if (step+1) % self.cfg['i_print'] == 0:
                 metric_info = {}
-                metric_info['train/compute_psnr'] = compute_psnr( 
-                    color_map_backward(outputs['pixel_colors_gt'][0].cpu().numpy()), 
-                    color_map_backward(outputs['pixel_colors_nr'][0].cpu().detach().numpy()))
+                # metric_info['train/compute_psnr'] = compute_psnr( 
+                #     color_map_backward(outputs['pixel_colors_gt'][0].cpu().numpy()), 
+                #     color_map_backward(outputs['pixel_colors_nr'][0].cpu().detach().numpy()))
                 metric_info['train/img2psnr'] = img2psnr( 
                     outputs['pixel_colors_gt'][0], 
                     outputs['pixel_colors_nr'][0])

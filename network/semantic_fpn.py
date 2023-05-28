@@ -102,10 +102,7 @@ class SemanticFPN(nn.Module):
             ).tensor
         else:
             targets = None
-        results, losses = self.sem_seg_head(features, targets)
-
-        # if self.training:
-        #     return losses
+        results, _ = self.sem_seg_head(features, targets)
 
         processed_results = {}
         for result, input_per_image, image_size in zip(results, batched_inputs, images.image_sizes):
@@ -136,7 +133,6 @@ class NeRFSemSegFPNHead(nn.Module):
         num_classes: int,
         conv_dims: int,
         common_stride: int,
-        loss_weight: float = 1.0,
         norm: Optional[Union[str, Callable]] = None,
         ignore_value: int = -1,
     ):
@@ -162,7 +158,6 @@ class NeRFSemSegFPNHead(nn.Module):
 
         self.ignore_value = ignore_value
         self.common_stride = common_stride
-        self.loss_weight = loss_weight
 
         self.scale_heads = []
         for in_feature, stride, channels in zip(
@@ -190,7 +185,7 @@ class NeRFSemSegFPNHead(nn.Module):
                     )
             self.scale_heads.append(nn.Sequential(*head_ops))
             self.add_module(in_feature, self.scale_heads[-1])
-        self.predictor = Conv2d(conv_dims, num_classes, kernel_size=1, stride=1, padding=0)
+        self.predictor = Conv2d(conv_dims, num_classes + 1, kernel_size=1, stride=1, padding=0)
         weight_init.c2_msra_fill(self.predictor)
 
     @classmethod
@@ -204,7 +199,6 @@ class NeRFSemSegFPNHead(nn.Module):
             "conv_dims": cfg.MODEL.SEM_SEG_HEAD.CONVS_DIM,
             "common_stride": cfg.MODEL.SEM_SEG_HEAD.COMMON_STRIDE,
             "norm": cfg.MODEL.SEM_SEG_HEAD.NORM,
-            "loss_weight": cfg.MODEL.SEM_SEG_HEAD.LOSS_WEIGHT,
         }
 
     def forward(self, features, targets=None):
@@ -218,13 +212,6 @@ class NeRFSemSegFPNHead(nn.Module):
             x, scale_factor=self.common_stride, mode="bilinear", align_corners=False
         )
         return x, {}
-        # if self.training:
-        #     return None, self.losses(x, targets)
-        # else:
-        #     x = F.interpolate(
-        #         x, scale_factor=self.common_stride, mode="bilinear", align_corners=False
-        #     )
-        #     return x, {}
 
     def layers(self, features):
         for i, f in enumerate(self.in_features):
@@ -234,17 +221,3 @@ class NeRFSemSegFPNHead(nn.Module):
                 x = x + self.scale_heads[i](features[f])
         x = self.predictor(x)
         return x
-
-    def losses(self, predictions, targets):
-        predictions = predictions.float()  # https://github.com/pytorch/pytorch/issues/48163
-        predictions = F.interpolate(
-            predictions,
-            scale_factor=self.common_stride,
-            mode="bilinear",
-            align_corners=False,
-        )
-        loss = F.cross_entropy(
-            predictions, targets, reduction="mean", ignore_index=self.ignore_value
-        )
-        losses = {"loss_sem_seg": loss * self.loss_weight}
-        return losses

@@ -40,9 +40,9 @@ use_nr_fine_loss: true
 
 # lr
 load_pretrain: out/train_with_maskformer/model_step20000.pth
-total_step: 600000
-val_interval: 600000
-i_print: 10
+total_step: 60000
+val_interval: 2000
+i_print: 50
 save_interval: 10000
 lr_type: exp_decay
 optimizer_type: adam
