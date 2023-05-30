@@ -55,18 +55,18 @@ class BaseRenderer(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = {**self.base_cfg, **cfg}
-        # self.vis_encoder = name2vis_encoder[self.cfg['vis_encoder_type']](
-        #     self.cfg['vis_encoder_cfg'])
-        # self.dist_decoder = name2dist_decoder[self.cfg['dist_decoder_type']](
-        #     self.cfg['dist_decoder_cfg'])
-        # self.image_encoder = ResUNetLight(3, [1, 2, 6, 4], 32, inplanes=16)
-        # self.agg_net = name2agg_net[self.cfg['agg_net_type']](
-        #     self.cfg['agg_net_cfg'])
-        # if self.cfg['use_hierarchical_sampling']:
-        #     self.fine_dist_decoder = name2dist_decoder[self.cfg['dist_decoder_type']](
-        #         self.cfg['fine_dist_decoder_cfg'])
-        #     self.fine_agg_net = name2agg_net[self.cfg['agg_net_type']](
-        #         self.cfg['fine_agg_net_cfg'])
+        self.vis_encoder = name2vis_encoder[self.cfg['vis_encoder_type']](
+            self.cfg['vis_encoder_cfg'])
+        self.dist_decoder = name2dist_decoder[self.cfg['dist_decoder_type']](
+            self.cfg['dist_decoder_cfg'])
+        self.image_encoder = ResUNetLight(3, [1, 2, 6, 4], 32, inplanes=16)
+        self.agg_net = name2agg_net[self.cfg['agg_net_type']](
+            self.cfg['agg_net_cfg'])
+        if self.cfg['use_hierarchical_sampling']:
+            self.fine_dist_decoder = name2dist_decoder[self.cfg['dist_decoder_type']](
+                self.cfg['fine_dist_decoder_cfg'])
+            self.fine_agg_net = name2agg_net[self.cfg['agg_net_type']](
+                self.cfg['fine_agg_net_cfg'])
             
         self.is_train_semantic = cfg['is_train_semantic']
         self.use_resunet = cfg['use_resunet']
@@ -393,9 +393,9 @@ class Renderer(BaseRenderer):
 
         src_imgs_info = data['src_imgs_info'].copy(
         ) if 'src_imgs_info' in data else None
-        # render_outputs = self.render_call(
-        #     que_imgs_info, ref_imgs_info, is_train, src_imgs_info)
-        render_outputs = {}
+        render_outputs = self.render_call(
+            que_imgs_info, ref_imgs_info, is_train, src_imgs_info)
+        # render_outputs = {}
         if self.is_train_semantic is True and self.use_resunet is False:
             sem_seg_gt = que_imgs_info['labels'].reshape(240, 320).detach().long()
             instances = Instances((240, 320))
@@ -452,15 +452,18 @@ class Renderer(BaseRenderer):
             if self.training is True:
                 render_outputs['pixel_label_gt'] = \
                     torch.cat([que_imgs_info['labels'], ref_imgs_info['labels']], dim=0)
+                render_outputs['pixel_label_gt_fine'] = render_outputs['pixel_label_gt']
                 batch_inputs = torch.cat([que_imgs_info['imgs'], ref_imgs_info['imgs']], dim=0)
             else:
                 render_outputs['pixel_label_gt'] = que_imgs_info['labels']
+                render_outputs['pixel_label_gt_fine'] = render_outputs['pixel_label_gt']
                 batch_inputs = que_imgs_info['imgs']
             semantic_output = self.semantic_branch(batch_inputs)
             semantic_output = F.interpolate(
                     semantic_output, size=(240, 320), mode="bilinear", align_corners=False
                 ).permute(0,2,3,1)
             render_outputs['pixel_label_nr'] = semantic_output
+            render_outputs['pixel_label_nr_fine'] = semantic_output
             
         # if (self.cfg['use_depth_loss'] and 'true_depth' in ref_imgs_info) or (not is_train):
         #     render_outputs.update(

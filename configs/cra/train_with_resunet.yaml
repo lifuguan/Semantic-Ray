@@ -1,4 +1,4 @@
-name: debug
+name: train_with_resunet
 
 agg_net_type: no_semantic
 # network
@@ -29,19 +29,19 @@ fine_agg_net_cfg: {
 }
 
 # loss
-loss: [semantic]
-render_loss_scale: 0.0
+loss: [render, semantic]
+render_loss_scale: 0.75
 semantic_loss_scale: 0.25
-val_metric: [iou]
+val_metric: [psnr_ssim, vis_img, iou, vis_sem]
 key_metric_name: miou
 use_dr_loss: false
 use_dr_fine_loss: false
 use_nr_fine_loss: true
 
 # lr
-load_pretrain: out/train_with_maskformer/model_step20000.pth
+load_pretrain: out/neuray_gen_depth/model_best.pth
 total_step: 60000
-val_interval: 20
+val_interval: 2000
 i_print: 50
 save_interval: 10000
 lr_type: exp_decay
