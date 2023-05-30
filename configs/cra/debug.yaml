@@ -4,7 +4,7 @@ agg_net_type: no_semantic
 # network
 init_net_type: depth
 use_hierarchical_sampling: true
-use_depth_loss: true
+use_depth_loss: false
 dist_decoder_cfg:
   use_vis: true
 fine_dist_decoder_cfg:
@@ -29,19 +29,19 @@ fine_agg_net_cfg: {
 }
 
 # loss
-loss: [render, semantic]
-render_loss_scale: 0.75
+loss: [semantic]
+render_loss_scale: 0.0
 semantic_loss_scale: 0.25
-val_metric: [psnr_ssim, vis_img, iou, vis_sem]
+val_metric: [iou]
 key_metric_name: miou
 use_dr_loss: false
 use_dr_fine_loss: false
 use_nr_fine_loss: true
 
 # lr
-load_pretrain: out/train_with_maskformer/model_step20000.pth
+# load_pretrain: out/train_with_maskformer/model_step20000.pth
 total_step: 60000
-val_interval: 10
+val_interval: 20
 i_print: 50
 save_interval: 10000
 lr_type: exp_decay
@@ -61,7 +61,8 @@ train_dataset_cfg:
   type2sample_weights: {scannet: 1}
   train_database_types: ['scannet']
   aug_pixel_center_sample: true
-  train_ray_num: 1024
+  train_ray_num: 2048
+  load_whole_image: false
   is_train_semantic: true   # for maskformer training
 val_set_list: configs/scannetv2_val_split.txt
 
@@ -92,7 +93,8 @@ semantic_color_map: [
 # use MaskFormer
 
 is_train_semantic: true
+use_resunet: true
 # semantic_config_file: configs/mask_former/maskformer_R50.yaml
 semantic_config_file: configs/mask_former/semantic_fpn_R50.yaml
 
-ray_batch_num: 25600
+ray_batch_num: 2048

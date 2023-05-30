@@ -9,7 +9,7 @@ MODEL:
   SEM_SEG_HEAD:
     NAME: "NeRFSemSegFPNHead"
     IN_FEATURES: ["p2", "p3", "p4", "p5"]
-    IGNORE_VALUE: 65535
+    IGNORE_VALUE: 20
     NUM_CLASSES: 20
     COMMON_STRIDE: 4  # not used, hard-coded
     LOSS_WEIGHT: 1.0

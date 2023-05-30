@@ -24,9 +24,9 @@ class LearningRateManager():
                     new.append(param)
                 else:
                     old.append(param)
-            return optimizer([{'params': old}, {'params': new}], lr=1e-3, **optim_args)
+            return optimizer([{'params': old}, {'params': new}], lr=0.0001, **optim_args)
         else:
-            return optimizer(network.parameters(), lr=1e-3, **optim_args)
+            return optimizer(network.parameters(), lr=0.0001, **optim_args)
 
     def __call__(self, optimizer, step, *args, **kwargs):
         pass

@@ -188,6 +188,7 @@ class Trainer:
                 if k.startswith('loss'):
                     loss = loss+torch.mean(v)
             log_info['loss_all'] = loss
+            # log_info['lr'] = lr
 
             loss.backward()
             if 'max_grad_norm' in self.cfg:
@@ -235,9 +236,9 @@ class Trainer:
                 # metric_info['train/compute_psnr'] = compute_psnr( 
                 #     color_map_backward(outputs['pixel_colors_gt'][0].cpu().numpy()), 
                 #     color_map_backward(outputs['pixel_colors_nr'][0].cpu().detach().numpy()))
-                metric_info['train/img2psnr'] = img2psnr( 
-                    outputs['pixel_colors_gt'][0], 
-                    outputs['pixel_colors_nr'][0])
+                # metric_info['train/img2psnr'] = img2psnr( 
+                #     outputs['pixel_colors_gt'][0], 
+                #     outputs['pixel_colors_nr'][0])
                 for k in metric_info.keys():
                     logstr += " {}: {:.6f}".format(k, metric_info[k].item())
                 if self.cfg['name'] != 'debug':

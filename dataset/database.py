@@ -144,8 +144,8 @@ class ScannetDatabase(BaseDatabase):
         label = cv2.resize(label, (w, h), interpolation=cv2.INTER_NEAREST)
         label = label.astype(np.int32)
         label = self.scan2nyu[label]
-        return self.label_mapping(label)
-
+        label = self.label_mapping(label)
+        return label
 
 class ReplicaDatabase(BaseDatabase):
     def __init__(self, database_name):

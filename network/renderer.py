@@ -5,6 +5,8 @@ from network.aggregate_net import name2agg_net
 from network.dist_decoder import name2dist_decoder
 from network.init_net import name2init_net
 from network.ops import ResUNetLight
+from torch.nn import functional as F
+
 from network.vis_encoder import name2vis_encoder
 from network.render_ops import *
 
@@ -53,25 +55,29 @@ class BaseRenderer(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = {**self.base_cfg, **cfg}
-        self.vis_encoder = name2vis_encoder[self.cfg['vis_encoder_type']](
-            self.cfg['vis_encoder_cfg'])
-        self.dist_decoder = name2dist_decoder[self.cfg['dist_decoder_type']](
-            self.cfg['dist_decoder_cfg'])
-        self.image_encoder = ResUNetLight(3, [1, 2, 6, 4], 32, inplanes=16)
-        self.agg_net = name2agg_net[self.cfg['agg_net_type']](
-            self.cfg['agg_net_cfg'])
-        if self.cfg['use_hierarchical_sampling']:
-            self.fine_dist_decoder = name2dist_decoder[self.cfg['dist_decoder_type']](
-                self.cfg['fine_dist_decoder_cfg'])
-            self.fine_agg_net = name2agg_net[self.cfg['agg_net_type']](
-                self.cfg['fine_agg_net_cfg'])
+        # self.vis_encoder = name2vis_encoder[self.cfg['vis_encoder_type']](
+        #     self.cfg['vis_encoder_cfg'])
+        # self.dist_decoder = name2dist_decoder[self.cfg['dist_decoder_type']](
+        #     self.cfg['dist_decoder_cfg'])
+        # self.image_encoder = ResUNetLight(3, [1, 2, 6, 4], 32, inplanes=16)
+        # self.agg_net = name2agg_net[self.cfg['agg_net_type']](
+        #     self.cfg['agg_net_cfg'])
+        # if self.cfg['use_hierarchical_sampling']:
+        #     self.fine_dist_decoder = name2dist_decoder[self.cfg['dist_decoder_type']](
+        #         self.cfg['fine_dist_decoder_cfg'])
+        #     self.fine_agg_net = name2agg_net[self.cfg['agg_net_type']](
+        #         self.cfg['fine_agg_net_cfg'])
             
         self.is_train_semantic = cfg['is_train_semantic']
+        self.use_resunet = cfg['use_resunet']
         if self.is_train_semantic is True:
-            cfg = self.semantic_branch_setup(cfg['semantic_config_file'])
-            self.semantic_branch = build_model(cfg)
-            DetectionCheckpointer(self.semantic_branch, save_dir='out/debug').resume_or_load(
-                'model_zoo/maskformer_final.pkl', resume=False)
+            if self.use_resunet is True:
+                self.semantic_branch = ResUNetLight(out_dim=20+1)
+            else:
+                cfg = self.semantic_branch_setup(cfg['semantic_config_file'])
+                self.semantic_branch = build_model(cfg)
+                DetectionCheckpointer(self.semantic_branch, save_dir='out/debug').resume_or_load(
+                    cfg.MODEL.WEIGHTS, resume=False)
 
     def semantic_branch_setup(self, semantic_config_file):
         """
@@ -387,11 +393,11 @@ class Renderer(BaseRenderer):
 
         src_imgs_info = data['src_imgs_info'].copy(
         ) if 'src_imgs_info' in data else None
-        render_outputs = self.render_call(
-            que_imgs_info, ref_imgs_info, is_train, src_imgs_info)
-        
-        if self.is_train_semantic is True:
-            sem_seg_gt = render_outputs['pixel_label_gt'].reshape(240, 320).detach().long()
+        # render_outputs = self.render_call(
+        #     que_imgs_info, ref_imgs_info, is_train, src_imgs_info)
+        render_outputs = {}
+        if self.is_train_semantic is True and self.use_resunet is False:
+            sem_seg_gt = que_imgs_info['labels'].reshape(240, 320).detach().long()
             instances = Instances((240, 320))
             classes = sem_seg_gt.unique()
             classes = classes[classes != self.cfg['ignore_label']]
@@ -406,16 +412,57 @@ class Renderer(BaseRenderer):
             else:
                 instances.gt_masks = torch.stack(masks)
             
-            batch_input ={
-                "image": render_outputs['pixel_colors_gt'].reshape(240, 320, 3).permute(2,0,1),
+            batch_inputs = [{
+                "image": que_imgs_info['imgs'].reshape(240, 320, 3).permute(2,0,1),
                 "sem_seg": sem_seg_gt,
                 "instances": instances
-            }
-            semantic_output = self.semantic_branch([batch_input])
+            }]
+            if self.training is True:
+                for i in range(len(ref_imgs_info['labels'])):
+                    sem_seg_gt = ref_imgs_info['labels'][i].reshape(240, 320).long()
+                    instances = Instances((240, 320))
+                    classes = sem_seg_gt.unique()
+                    classes = classes[classes != self.cfg['ignore_label']]
+                    masks = []
+                    for class_id in classes:
+                        masks.append(sem_seg_gt == class_id)
+                    instances.gt_classes = classes
 
+                    if len(masks) == 0:
+                        # Some image does not have annotation (all ignored)
+                        instances.gt_masks = torch.zeros((0, sem_seg_gt.shape[-2], sem_seg_gt.shape[-1]))
+                    else:
+                        instances.gt_masks = torch.stack(masks)
+                    
+                    batch_input = {
+                        "image": ref_imgs_info['imgs'][i].reshape(240, 320, 3).permute(2,0,1),
+                        "sem_seg": sem_seg_gt,
+                        "instances": instances
+                    }   
+                    batch_inputs.append(batch_input)
+                render_outputs['pixel_label_gt'] = \
+                    torch.cat([que_imgs_info['labels'], ref_imgs_info['labels']], dim=0)
+            else:
+                render_outputs['pixel_label_gt'] = que_imgs_info['labels']
+                batch_inputs = que_imgs_info['imgs']
+            semantic_output = self.semantic_branch(batch_inputs)
             render_outputs.update(semantic_output)
 
-        if (self.cfg['use_depth_loss'] and 'true_depth' in ref_imgs_info) or (not is_train):
-            render_outputs.update(
-                self.predict_mean_for_depth_loss(ref_imgs_info))
+        elif self.is_train_semantic is True and self.use_resunet is True:
+            if self.training is True:
+                render_outputs['pixel_label_gt'] = \
+                    torch.cat([que_imgs_info['labels'], ref_imgs_info['labels']], dim=0)
+                batch_inputs = torch.cat([que_imgs_info['imgs'], ref_imgs_info['imgs']], dim=0)
+            else:
+                render_outputs['pixel_label_gt'] = que_imgs_info['labels']
+                batch_inputs = que_imgs_info['imgs']
+            semantic_output = self.semantic_branch(batch_inputs)
+            semantic_output = F.interpolate(
+                    semantic_output, size=(240, 320), mode="bilinear", align_corners=False
+                ).permute(0,2,3,1)
+            render_outputs['pixel_label_nr'] = semantic_output
+            
+        # if (self.cfg['use_depth_loss'] and 'true_depth' in ref_imgs_info) or (not is_train):
+        #     render_outputs.update(
+        #         self.predict_mean_for_depth_loss(ref_imgs_info))
         return render_outputs

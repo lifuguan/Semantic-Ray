@@ -193,25 +193,22 @@ class MaskFormer(nn.Module):
                 align_corners=False,
             )
 
-            processed_results = {}
+            processed_results = {"pixel_label_nr":[]}
             for mask_cls_result, mask_pred_result, input_per_image, image_size in zip(
                 mask_cls_results, mask_pred_results, batched_inputs, images.image_sizes
             ):
                 height = input_per_image.get("height", image_size[0])
                 width = input_per_image.get("width", image_size[1])
-
                 if self.sem_seg_postprocess_before_inference:
-                    mask_pred_result = sem_seg_postprocess(
-                        mask_pred_result, image_size, height, width
-                    )
+                        mask_pred_result = sem_seg_postprocess(
+                            mask_pred_result, image_size, height, width
+                        )
 
-                # semantic segmentation inference
+                    # semantic segmentation inference
                 r = self.semantic_inference(mask_cls_result, mask_pred_result).permute(1,2,0).unsqueeze(0)
-                # if self.sem_seg_postprocess_before_inference:
-                #     r = sem_seg_postprocess(r, image_size, height, width)
-                processed_results["pixel_label_nr"] = r
-                processed_results["pixel_label_nr_fine"] = r
-
+                processed_results["pixel_label_nr"].append(r)
+            processed_results["pixel_label_nr"] = \
+                torch.cat(processed_results["pixel_label_nr"], dim=0)
             return processed_results
 
     def prepare_targets(self, targets, images):

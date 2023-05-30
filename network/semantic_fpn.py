@@ -84,6 +84,7 @@ class SemanticFPN(nn.Module):
               each class for each pixel.
         """
         images = [x["image"].to(self.device) for x in batched_inputs]
+        # images = [(x - self.pixel_mean) / self.pixel_std for x in images]
         images = ImageList.from_tensors(
             images,
             self.backbone.size_divisibility,
@@ -104,13 +105,21 @@ class SemanticFPN(nn.Module):
             targets = None
         results, _ = self.sem_seg_head(features, targets)
 
-        processed_results = {}
+        # processed_results = {}
+        # for result, input_per_image, image_size in zip(results, batched_inputs, images.image_sizes):
+        #     height = input_per_image.get("height", image_size[0])
+        #     width = input_per_image.get("width", image_size[1])
+        #     r = sem_seg_postprocess(result, image_size, height, width).permute(1,2,0).unsqueeze(0)
+        #     processed_results["pixel_label_nr"] = r
+        #     processed_results["pixel_label_nr_fine"] = r
+        processed_results = {"pixel_label_nr":[]}
         for result, input_per_image, image_size in zip(results, batched_inputs, images.image_sizes):
             height = input_per_image.get("height", image_size[0])
             width = input_per_image.get("width", image_size[1])
             r = sem_seg_postprocess(result, image_size, height, width).permute(1,2,0).unsqueeze(0)
-            processed_results["pixel_label_nr"] = r
-            processed_results["pixel_label_nr_fine"] = r
+            processed_results["pixel_label_nr"].append(r)
+        processed_results["pixel_label_nr"] = \
+            torch.cat(processed_results["pixel_label_nr"], dim=0)
         return processed_results
 
 

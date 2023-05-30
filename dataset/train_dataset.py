@@ -321,7 +321,7 @@ class RendererDataset(Dataset):
             self.consistent_depth_range(ref_imgs_info, que_imgs_info)
 
         # generate coords
-        if self.is_train and not self.cfg['is_train_semantic']:
+        if self.is_train and self.cfg['load_whole_image']:
             coords = self.generate_coords_for_training(database,que_imgs_info)
         else:
             qn, _, hn, wn = que_imgs_info['imgs'].shape
