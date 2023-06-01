@@ -102,6 +102,8 @@ def build_imgs_info(database, ref_ids, pad_interval=-1, is_aligned=True, align_d
         ref_depths = np.stack(ref_depths, 0)[:, None, :, :]
     else:
         ref_imgs = color_map_forward(np.asarray([database.get_image(ref_id) for ref_id in ref_ids])).transpose([0, 3, 1, 2])
+        ref_imgs_path = [f'{database.root_dir}/color/{int(ref_id)}.jpg' for ref_id in ref_ids]
+        ref_labels_path = [f'{database.root_dir}/label-filt/{int(ref_id)}.png' for ref_id in ref_ids]
         ref_labels = np.asarray([database.get_label(ref_id) for ref_id in ref_ids])[:, None, :, :]
         ref_masks =  np.asarray([database.get_mask(ref_id) for ref_id in ref_ids], dtype=np.float32)[:, None, :, :]
         if has_depth:
@@ -119,7 +121,7 @@ def build_imgs_info(database, ref_ids, pad_interval=-1, is_aligned=True, align_d
     if align_depth_range:
         ref_depth_range[:,0]=np.min(ref_depth_range[:,0])
         ref_depth_range[:,1]=np.max(ref_depth_range[:,1])
-    ref_imgs_info = {'imgs': ref_imgs, 'poses': ref_poses, 'Ks': ref_Ks, 'depth_range': ref_depth_range, 'masks': ref_masks, 'labels': ref_labels}
+    ref_imgs_info = {'imgs': ref_imgs, 'poses': ref_poses, 'Ks': ref_Ks, 'depth_range': ref_depth_range, 'masks': ref_masks, 'labels': ref_labels, 'imgs_path': ref_imgs_path, 'labels_path': ref_labels_path}
     if has_depth: ref_imgs_info['depth'] = ref_depths
     if pad_interval!=-1:
         ref_imgs_info = pad_imgs_info(ref_imgs_info, pad_interval)
@@ -147,3 +149,47 @@ def imgs_info_slice(imgs_info, indices):
     for k, v in imgs_info.items():
         imgs_info_out[k] = v[indices]
     return imgs_info_out
+
+import pandas as pd
+from PIL import Image
+from utils.base_utils import downsample_gaussian_blur
+from dataset.semantic_utils import PointSegClassMapping
+import imageio
+import cv2
+mapping_file = 'data/scannet/scannetv2-labels.combined.tsv'
+mapping_file = pd.read_csv(mapping_file, sep='\t', header=0)
+scan_ids = mapping_file['id'].values
+nyu40_ids = mapping_file['nyu40id'].values
+scan2nyu = np.zeros(max(scan_ids) + 1, dtype=np.int32)
+for i in range(len(scan_ids)):
+    scan2nyu[scan_ids[i]] = nyu40_ids[i]
+label_mapping = PointSegClassMapping(
+    valid_cat_ids=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+                    11, 12, 14, 16, 24, 28, 33, 34, 36, 39],
+    max_cat_id=40
+)
+    
+def load_imgs_and_labels(imgs_info, device):
+    image_size = 320
+    ratio = image_size / 1296
+    h, w = int(ratio*972), int(image_size)
+    imgs_path = imgs_info['imgs_path']
+    labels_path = imgs_info['labels_path']
+
+    rgbs = [imageio.imread(rgb_file).astype(np.float32) / 255.0 for rgb_file in imgs_path]
+
+    refine_rgbs = np.concatenate([[cv2.resize(downsample_gaussian_blur(rgb, ratio), (w, h), interpolation=cv2.INTER_LINEAR) for rgb in rgbs]], axis=0)
+
+    refine_labels = []
+    for label_file in labels_path:
+        img = Image.open(label_file)
+        label = np.asarray(img, dtype=np.int32)
+        label = np.ascontiguousarray(label)
+        label = cv2.resize(label, (w, h), interpolation=cv2.INTER_NEAREST)
+        label = label.astype(np.int32)
+        label = scan2nyu[label]
+        label = label_mapping(label)
+        refine_labels.append(label)
+    refine_labels = np.concatenate([refine_labels], axis=0)
+    return torch.as_tensor(refine_rgbs.copy()).float().contiguous().to(device=device).permute(0,3,1,2), \
+        torch.as_tensor(refine_labels.copy()).long().contiguous().to(device=device)

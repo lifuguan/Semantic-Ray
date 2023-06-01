@@ -14,5 +14,13 @@ CUDA_VISIBLE_DEVICES=4 python run_training.py --config configs/cra/train_cra_sca
 CUDA_VISIBLE_DEVICES=5 python run_training.py --config configs/cra/only_train_semantic_fpn.yaml
 CUDA_VISIBLE_DEVICES=6 python run_training.py --config configs/cra/only_train_resunet.yaml
 CUDA_VISIBLE_DEVICES=6 python run_training.py --config configs/cra/train_with_resunet.yaml
+CUDA_VISIBLE_DEVICES=7 python run_training.py --config configs/cra/train_with_unet.yaml
 
 export PYTHONPATH="${PYTHONPATH}:$(pwd)"
+
+
+CUDA_VISIBLE_DEVICES=6 python train_resunet.py --name 'Order(192 scene)'
+CUDA_VISIBLE_DEVICES=7 python train_resunet.py --name 'Random(192 scene)'
+
+CUDA_VISIBLE_DEVICES=4 python train_resunet.py --name 'Order(3 scene)'
+CUDA_VISIBLE_DEVICES=5 python train_resunet.py --name 'Random(3 scene)'
