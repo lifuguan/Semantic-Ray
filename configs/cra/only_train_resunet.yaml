@@ -93,8 +93,9 @@ semantic_color_map: [
 # use MaskFormer
 
 is_train_semantic: true
-use_resunet: true
-# semantic_config_file: configs/mask_former/maskformer_R50.yaml
+use_model: resunet
+resunet_weight: out/resunet/checkpoint_epoch8.pth
+semantic_config_file: configs/mask_former/maskformer_R50.yaml
 semantic_config_file: configs/mask_former/semantic_fpn_R50.yaml
 
 ray_batch_num: 2048

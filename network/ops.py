@@ -174,7 +174,7 @@ class ResUNetLight(nn.Module):
         self.iconv3 = conv(64 + 64, 64, 3, 1)
         self.upconv2 = upconv(64, 32, 3, 2)
         self.iconv2 = conv(32 + 32, 32, 3, 1)
-
+        self.out_dim = out_dim
         # fine-level conv
         self.out_conv = nn.Conv2d(32, out_dim, 1, 1)
 

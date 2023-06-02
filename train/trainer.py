@@ -5,6 +5,7 @@ import numpy as np
 from torch.nn import DataParallel
 from torch.nn.utils import clip_grad_norm_
 from torch.optim import Adam, AdamW, SGD
+import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from pprint import pprint
@@ -115,6 +116,9 @@ class Trainer:
             self.cfg['lr_cfg'])
         self.optimizer = self.lr_manager.construct_optimizer(
             self.optimizer, self.network, self.cfg['lr_cfg']['optim_args'])
+        # self.optimizer = Adam(self.network.parameters(), lr=1e-3, weight_decay=1.0e-5)
+        # self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 'max', patience=5)  # goal: maximize Dice score
+        # self.grad_scaler = torch.cuda.amp.GradScaler()
 
     def __init__(self, cfg):
         self.cfg = {**self.default_cfg, **cfg}
@@ -174,11 +178,15 @@ class Trainer:
             self.train_network.zero_grad()
 
             log_info = {}
-            outputs = self.train_network(train_data)    # 载入训练数据
+            outputs = self.network(train_data)    # 载入训练数据
             for loss in self.train_losses:
                 loss_results = loss(outputs, train_data, step)
                 for k, v in loss_results.items():
                     log_info[k] = v
+            for metric in self.val_metrics:
+                metric_results = metric(outputs, train_data, step, data_index=train_data['que_imgs_info']['imgs_path'][0].split('/')[-1][:-4],model_name=self.cfg['name'])
+                for k, v in metric_results.items():
+                    log_info[k] = v.to(device="cuda:0")
 
             loss = 0
             for k, v in outputs.items():
@@ -218,6 +226,12 @@ class Trainer:
                         f'New best model {self.cfg["key_metric_name"]}: {val_para:.5f} previous {best_para:.5f}')
                     best_para = val_para
                     self._save_model(step+1, best_para, self.best_pth_fn)
+                else:
+                    print(
+                        f'Current model {self.cfg["key_metric_name"]}: {val_para:.5f} best {best_para:.5f}')
+                    
+                # self.scheduler.step(val_para)
+
                 if self.cfg['name'] != 'debug':
                     wandb.log(val_results)
                 self._log_data(val_results, step+1, 'val')
@@ -252,7 +266,7 @@ class Trainer:
     def eval(self, model_path):
         self._init_dataset()
         self._init_network()
-        _, step = self._load_model(model_path, load_optimizer=False)
+        _, step = self._load_model(model_path, load_optimizer=False, load_step=False)
         val_results = {}
         val_para = 0
         for vi, val_set in enumerate(self.val_set_list):

@@ -163,6 +163,33 @@ torch.save(resunet, "out/resunet/resunet_ep8.pth")
 param.keys()
 
 # %%
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from pathlib import Path
+from torch.utils.data import DataLoader
+from dataset.semantic_dataset import StatisticRendererDataset
+from tqdm import tqdm
+
+import torch
+import numpy as np
+
+train_set = StatisticRendererDataset(is_train=True)
+# 3. Create data loaders
+loader_args = dict(batch_size=1, num_workers=8, pin_memory=True)
+train_loader = DataLoader(train_set, shuffle=True, **loader_args)
+global_step = 0
+iters = len(train_loader)
+scene_statistic = []
+with tqdm(total=iters, desc=f'Iter {global_step}/{iters}', unit='img') as pbar:
+    for batch in train_loader: 
+        scene_statistic.append(batch)
+        pbar.update(1)
+
+
+np.save("out/scene_statistic.npy", np.array(scene_statistic))
 
 
 
+
+# %%

@@ -164,7 +164,7 @@ class VisualizeSemantic(Loss):
             h, w = data_gt['que_imgs_info']['imgs'].shape[2:]
         else:
             h, w = data_pr['que_imgs_info']['imgs'].shape[2:]
-        self.color_map.to(data_pr['pixel_colors_gt'].device)
+        self.color_map.to(data_gt['que_imgs_info']['imgs'].device)
         
         def get_img(key, channel):
             rgbs = data_pr[key]  # 1,rn,3

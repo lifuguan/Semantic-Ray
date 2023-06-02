@@ -1,0 +1,2 @@
+scannet/scene0027_00/black_320
+scannet/scene0027_00/black_320

@@ -291,27 +291,12 @@ class RendererDataset(Dataset):
         if self.is_train:
             # data augmentation
             depth_range_all = np.concatenate([ref_imgs_info['depth_range'],que_imgs_info['depth_range']],0)
-            if database.database_name.startswith('gso'): # only used in gso currently
-                depth_all = np.concatenate([ref_imgs_info['depth'],que_imgs_info['depth']],0)
-                mask_all = np.concatenate([ref_imgs_info['masks'],que_imgs_info['masks']],0)
-            else:
-                depth_all, mask_all = None, None
+
+            depth_all, mask_all = None, None
             depth_range_all = self.random_change_depth_range(depth_range_all)
             ref_imgs_info['depth_range'] = depth_range_all[:-1]
             que_imgs_info['depth_range'] = depth_range_all[-1:]
 
-            if database.database_name.startswith('gso') and self.cfg['use_depth']:
-                depth_aug = self.add_depth_noise(ref_imgs_info['depth'], ref_imgs_info['masks'], ref_imgs_info['depth_range'])
-                ref_imgs_info['true_depth'] = ref_imgs_info['depth']
-                ref_imgs_info['depth'] = depth_aug
-
-            if database.database_name.startswith('real_estate') \
-                or database.database_name.startswith('real_iconic') \
-                or database.database_name.startswith('space'):
-                # crop all datasets
-                ref_imgs_info, que_imgs_info = random_crop(ref_imgs_info, que_imgs_info, self.cfg['aug_forward_crop_size'])
-                if np.random.random()<0.5:
-                    ref_imgs_info, que_imgs_info = random_flip(ref_imgs_info, que_imgs_info)
 
             if self.cfg['use_depth_loss_for_all'] and self.cfg['use_depth']:
                 if not database.database_name.startswith('gso'):
@@ -321,7 +306,7 @@ class RendererDataset(Dataset):
             self.consistent_depth_range(ref_imgs_info, que_imgs_info)
 
         # generate coords
-        if self.is_train and self.cfg['load_whole_image']:
+        if self.is_train and self.cfg['load_whole_image'] is False:
             coords = self.generate_coords_for_training(database,que_imgs_info)
         else:
             qn, _, hn, wn = que_imgs_info['imgs'].shape

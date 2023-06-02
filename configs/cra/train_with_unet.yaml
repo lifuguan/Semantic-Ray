@@ -93,7 +93,7 @@ semantic_color_map: [
 # use MaskFormer
 
 is_train_semantic: true
-use_model: resunet
+use_model: unet
 semantic_config_file: configs/mask_former/maskformer_R50.yaml
 semantic_config_file: configs/mask_former/semantic_fpn_R50.yaml
 
