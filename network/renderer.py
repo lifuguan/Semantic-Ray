@@ -7,18 +7,20 @@ from network.init_net import name2init_net
 from network.ops import ResUNetLight
 from torch.nn import functional as F
 
+from utils.imgs_info import load_imgs_and_labels
+
 from network.vis_encoder import name2vis_encoder
 from network.render_ops import *
-
 from network.mask_former_modeling import MaskFormer
 from network.semantic_fpn import SemanticFPN
+from network.unet import UNet
+from network.semantic_config import add_mask_former_config, add_semantic_fpn_config
 
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.structures import Instances
 from detectron2.config import get_cfg
 from detectron2.projects.deeplab import add_deeplab_config
 from detectron2.modeling import build_model
-from network.semantic_config import add_mask_former_config, add_semantic_fpn_config
 
 class BaseRenderer(nn.Module):
     base_cfg = {
@@ -69,10 +71,14 @@ class BaseRenderer(nn.Module):
                 self.cfg['fine_agg_net_cfg'])
             
         self.is_train_semantic = cfg['is_train_semantic']
-        self.use_resunet = cfg['use_resunet']
+        self.use_model = cfg['use_model']
         if self.is_train_semantic is True:
-            if self.use_resunet is True:
+            if self.use_model == 'resunet':
                 self.semantic_branch = ResUNetLight(out_dim=20+1)
+                state_dict = torch.load(cfg['resunet_weight'])
+                # self.semantic_branch.load_state_dict(state_dict)
+            elif self.use_model == 'unet':
+                self.semantic_branch = UNet()
             else:
                 cfg = self.semantic_branch_setup(cfg['semantic_config_file'])
                 self.semantic_branch = build_model(cfg)
@@ -389,14 +395,14 @@ class Renderer(BaseRenderer):
     def forward(self, data):
         ref_imgs_info = data['ref_imgs_info'].copy()
         que_imgs_info = data['que_imgs_info'].copy()
-        is_train = 'eval' not in data
+        is_train = 'eval' not in data; device = que_imgs_info['imgs'].device
 
-        src_imgs_info = data['src_imgs_info'].copy(
-        ) if 'src_imgs_info' in data else None
-        render_outputs = self.render_call(
-            que_imgs_info, ref_imgs_info, is_train, src_imgs_info)
-        # render_outputs = {}
-        if self.is_train_semantic is True and self.use_resunet is False:
+        # src_imgs_info = data['src_imgs_info'].copy(
+        # ) if 'src_imgs_info' in data else None
+        # render_outputs = self.render_call(
+        #     que_imgs_info, ref_imgs_info, is_train, src_imgs_info)
+        render_outputs = {}
+        if self.is_train_semantic is True and self.use_model not in ['unet', 'resunet']:
             sem_seg_gt = que_imgs_info['labels'].reshape(240, 320).detach().long()
             instances = Instances((240, 320))
             classes = sem_seg_gt.unique()
@@ -448,22 +454,16 @@ class Renderer(BaseRenderer):
             semantic_output = self.semantic_branch(batch_inputs)
             render_outputs.update(semantic_output)
 
-        elif self.is_train_semantic is True and self.use_resunet is True:
-            if self.training is True:
-                render_outputs['pixel_label_gt'] = \
-                    torch.cat([que_imgs_info['labels'], ref_imgs_info['labels']], dim=0)
-                render_outputs['pixel_label_gt_fine'] = render_outputs['pixel_label_gt']
-                batch_inputs = torch.cat([que_imgs_info['imgs'], ref_imgs_info['imgs']], dim=0)
-            else:
-                render_outputs['pixel_label_gt'] = que_imgs_info['labels']
-                render_outputs['pixel_label_gt_fine'] = render_outputs['pixel_label_gt']
-                batch_inputs = que_imgs_info['imgs']
-            semantic_output = self.semantic_branch(batch_inputs)
+        elif self.is_train_semantic is True and self.use_model in ['resunet', 'unet']:
+            # imgs, labels = load_imgs_and_labels(que_imgs_info, device)
+            # render_outputs['pixel_label_gt'] = labels
+            render_outputs['pixel_label_gt'] = que_imgs_info['labels']
+
+            semantic_output = self.semantic_branch(que_imgs_info['imgs'])
             semantic_output = F.interpolate(
                     semantic_output, size=(240, 320), mode="bilinear", align_corners=False
                 ).permute(0,2,3,1)
             render_outputs['pixel_label_nr'] = semantic_output
-            render_outputs['pixel_label_nr_fine'] = semantic_output
             
         # if (self.cfg['use_depth_loss'] and 'true_depth' in ref_imgs_info) or (not is_train):
         #     render_outputs.update(
