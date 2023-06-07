@@ -211,10 +211,10 @@ class ResUNetLight(nn.Module):
         x = torch.cat([x2, x1], dim=1)
         return x
 
-    def forward(self, x):                       # x: [B, 3, H, W]
-        x = self.relu(self.bn1(self.conv1(x)))  # x: [B, 32, H/2, W/2]
+    def forward(self, x):                       # x: [B, 3, H, W] 240, 320
+        x0 = self.relu(self.bn1(self.conv1(x)))  # x: [B, 32, H/2, W/2]
 
-        x1 = self.layer1(x)                     # x1: [B, 32, H/4, W/4]
+        x1 = self.layer1(x0)                     # x1: [B, 32, H/4, W/4]
         x2 = self.layer2(x1)                    # x2: [B, 64, H/8, W/8]
         x3 = self.layer3(x2)                    # x3: [B, 128, H/16, W/16]
 
@@ -227,7 +227,8 @@ class ResUNetLight(nn.Module):
         x = self.iconv2(x)                      # x: [B, 32, H/4, W/4]
 
         x_out = self.out_conv(x)                # x_out: [B, 32, H/4, W/4]
-        return x_out
+
+        return x_out, [x0, x1, x2, x3]
 
 class ResEncoder(nn.Module):
     def __init__(self):
@@ -318,6 +319,145 @@ class ResEncoder(nn.Module):
         x_out = self.out_conv(x)
         return x_out
     
+
+class ResUNet(nn.Module):
+    def __init__(
+        self,
+        encoder="resnet34",
+        out_dim=32,
+        norm_layer=None,
+    ):
+
+        super(ResUNet, self).__init__()
+        assert encoder in [
+            "resnet18",
+            "resnet34",
+            "resnet50",
+            "resnet101",
+            "resnet152",
+        ], "Incorrect encoder type"
+        if encoder in ["resnet18", "resnet34"]:
+            filters = [64, 128, 256, 512]
+        else:
+            filters = [256, 512, 1024, 2048]
+
+        self.out_ch = out_dim
+
+        # original
+        layers = [3, 4, 6, 3]
+        if norm_layer is None:
+            # norm_layer = nn.BatchNorm2d
+            norm_layer = nn.InstanceNorm2d
+        self._norm_layer = norm_layer
+        self.dilation = 1
+        block = BasicBlock
+        replace_stride_with_dilation = [False, False, False]
+        self.inplanes = 64
+        self.groups = 1
+        self.base_width = 64
+        self.conv1 = nn.Conv2d(
+            3,
+            self.inplanes,
+            kernel_size=7,
+            stride=2,
+            padding=3,
+            bias=False,
+            padding_mode="reflect",
+        )
+        self.bn1 = norm_layer(self.inplanes, track_running_stats=False, affine=True)
+        self.relu = nn.ReLU(inplace=True)
+        self.layer1 = self._make_layer(block, 64, layers[0], stride=2)
+        self.layer2 = self._make_layer(
+            block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0]
+        )
+        self.layer3 = self._make_layer(
+            block, 256, layers[2], stride=2, dilate=replace_stride_with_dilation[1]
+        )
+
+        # decoder
+        self.upconv3 = upconv(filters[2], 128, 3, 2)
+        self.iconv3 = conv(filters[1] + 128, 128, 3, 1)
+        self.upconv2 = upconv(128, 64, 3, 2)
+        self.iconv2 = conv(filters[0] + 64, out_dim, 3, 1)
+
+        # fine-level conv
+        self.out_conv = nn.Conv2d(out_dim, out_dim, 1, 1)
+
+    def _make_layer(self, block, planes, blocks, stride=1, dilate=False):
+        norm_layer = self._norm_layer
+        downsample = None
+        previous_dilation = self.dilation
+        if dilate:
+            self.dilation *= stride
+            stride = 1
+        if stride != 1 or self.inplanes != planes * block.expansion:
+            downsample = nn.Sequential(
+                conv1x1(self.inplanes, planes * block.expansion, stride),
+                norm_layer(planes * block.expansion, track_running_stats=False, affine=True),
+            )
+
+        layers = []
+        layers.append(
+            block(
+                self.inplanes,
+                planes,
+                stride,
+                downsample,
+                self.groups,
+                self.base_width,
+                previous_dilation,
+                norm_layer,
+            )
+        )
+        self.inplanes = planes * block.expansion
+        for _ in range(1, blocks):
+            layers.append(
+                block(
+                    self.inplanes,
+                    planes,
+                    groups=self.groups,
+                    base_width=self.base_width,
+                    dilation=self.dilation,
+                    norm_layer=norm_layer,
+                )
+            )
+
+        return nn.Sequential(*layers)
+
+    def skipconnect(self, x1, x2):
+        diffY = x2.size()[2] - x1.size()[2]
+        diffX = x2.size()[3] - x1.size()[3]
+
+        x1 = F.pad(x1, (diffX // 2, diffX - diffX // 2, diffY // 2, diffY - diffY // 2))
+
+        # for padding issues, see
+        # https://github.com/HaiyongJiang/U-Net-Pytorch-Unstructured-Buggy/commit/0e854509c2cea854e247a9c615f175f76fbb2e3a
+        # https://github.com/xiaopeng-liao/Pytorch-UNet/commit/8ebac70e633bac59fc22bb5195e513d5832fb3bd
+
+        x = torch.cat([x2, x1], dim=1)
+        return x
+
+    def forward(self, x):
+        x = self.relu(self.bn1(self.conv1(x)))
+
+        x1 = self.layer1(x)
+        x2 = self.layer2(x1)
+        x3 = self.layer3(x2)
+
+        x = self.upconv3(x3)
+        x = self.skipconnect(x2, x)
+        x = self.iconv3(x)
+
+        x = self.upconv2(x)
+        x = self.skipconnect(x1, x)
+        x = self.iconv2(x)
+
+        x_out = self.out_conv(x)
+        
+        deep_sem = F.interpolate(x3, x_out.shape[-2:])  # 上采样到和rgb feat一样的维度
+
+        return x_out, deep_sem
+
     
 if __name__ == '__main__':
     print('ResUNetLight')

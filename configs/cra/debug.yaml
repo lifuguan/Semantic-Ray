@@ -1,4 +1,4 @@
-name: nerf_test
+name: debug
 
 agg_net_type: no_semantic
 # network
@@ -29,20 +29,19 @@ fine_agg_net_cfg: {
 }
 
 # loss
-loss: [semantic]
+loss: [render, semantic]
 render_loss_scale: 0.75
 semantic_loss_scale: 0.25
-val_metric: [iou,vis_sem]
+val_metric: [psnr_ssim, vis_img, iou, vis_sem]
 key_metric_name: miou
 use_dr_loss: false
 use_dr_fine_loss: false
 use_nr_fine_loss: true
 
 # lr
-# load_pretrain: out/train_with_maskformer/model_step20000.pth
-# load_pretrain: out/nerf_3_scene/model_best.pth
-total_step: 10000
-val_interval: 200
+load_pretrain: out/neuray_gen_depth/model_best.pth
+total_step: 60000
+val_interval: 2000
 i_print: 50
 save_interval: 10000
 lr_type: exp_decay
@@ -65,9 +64,7 @@ train_dataset_cfg:
   train_ray_num: 512
   load_whole_image: false
   is_train_semantic: true   # for maskformer training
-val_set_list: configs/scannetv2_val_split.txt 
-# val_set_list: configs/scannetv2_3_split.txt
-# val_set_list: configs/scannetv2_test_split.txt
+val_set_list: configs/scannetv2_val_split.txt
 
 semantic_color_map: [
   [174, 199, 232],  # wall
@@ -102,3 +99,5 @@ semantic_config_file: configs/mask_former/maskformer_R50.yaml
 semantic_config_file: configs/mask_former/semantic_fpn_R50.yaml
 
 ray_batch_num: 512
+
+use_deep_semantic: true

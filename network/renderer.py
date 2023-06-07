@@ -6,7 +6,7 @@ from network.dist_decoder import name2dist_decoder
 from network.init_net import name2init_net
 from network.ops import ResUNetLight
 from torch.nn import functional as F
-
+import mmdet
 from utils.imgs_info import load_imgs_and_labels
 
 from network.vis_encoder import name2vis_encoder
@@ -14,6 +14,7 @@ from network.render_ops import *
 from network.mask_former_modeling import MaskFormer
 from network.semantic_fpn import SemanticFPN
 from network.unet import UNet
+from network.fpn import FPN
 from network.semantic_config import add_mask_former_config, add_semantic_fpn_config
 
 from detectron2.checkpoint import DetectionCheckpointer
@@ -62,6 +63,10 @@ class BaseRenderer(nn.Module):
         self.dist_decoder = name2dist_decoder[self.cfg['dist_decoder_type']](
             self.cfg['dist_decoder_cfg'])
         self.image_encoder = ResUNetLight(3, [1, 2, 6, 4], 32, inplanes=16)
+
+        if self.cfg['use_deep_semantic'] is True:
+            self.image_fpn = FPN(in_channels=[16,32,64,128],out_channels=32, concat_out=True)
+        
         self.agg_net = name2agg_net[self.cfg['agg_net_type']](
             self.cfg['agg_net_cfg'])
         if self.cfg['use_hierarchical_sampling']:
@@ -147,6 +152,11 @@ class BaseRenderer(nn.Module):
         prj_img_feats = interpolate_feature_map(img_feats, prj_dict['pts'].reshape(rfn, qn * rn * dn, 2),
                                                 prj_dict['mask'].reshape(rfn, qn * rn * dn), h, w,)
         prj_dict['img_feats'] = prj_img_feats.reshape(rfn, qn, rn, dn, -1)
+
+        img_deep_feats = ref_imgs_info['img_deep_feats']
+        prj_img_deep_feats = interpolate_feature_map(img_deep_feats, prj_dict['pts'].reshape(rfn, qn * rn * dn, 2),
+                                                prj_dict['mask'].reshape(rfn, qn * rn * dn), h, w,)
+        prj_dict['img_deep_feats'] = prj_img_deep_feats.reshape(rfn, qn, rn, dn, -1)
         return prj_dict
 
     def predict_self_hit_prob_impl(self, que_ray_feats, que_depth, que_dists, depth_range, is_fine):
@@ -286,7 +296,12 @@ class BaseRenderer(nn.Module):
         return outputs
 
     def render(self, que_imgs_info, ref_imgs_info, is_train):
-        ref_img_feats = self.image_encoder(ref_imgs_info['imgs'])
+        if self.cfg['use_deep_semantic'] is True:
+            ref_img_feats, ref_fused_feats = self.image_encoder(ref_imgs_info['imgs'])
+            ref_fused_feats = self.image_fpn(ref_fused_feats)
+            ref_imgs_info['img_deep_feats'] = ref_fused_feats
+        else:
+            ref_img_feats, _ = self.image_encoder(ref_imgs_info['imgs'])
         ref_imgs_info['img_feats'] = ref_img_feats
         ref_imgs_info['ray_feats'] = self.vis_encoder(   # 把init的特征再一次融合
             ref_imgs_info['ray_feats'], ref_img_feats)
@@ -397,11 +412,11 @@ class Renderer(BaseRenderer):
         que_imgs_info = data['que_imgs_info'].copy()
         is_train = 'eval' not in data; device = que_imgs_info['imgs'].device
 
-        # src_imgs_info = data['src_imgs_info'].copy(
-        # ) if 'src_imgs_info' in data else None
-        # render_outputs = self.render_call(
-        #     que_imgs_info, ref_imgs_info, is_train, src_imgs_info)
-        render_outputs = {}
+        src_imgs_info = data['src_imgs_info'].copy(
+        ) if 'src_imgs_info' in data else None
+        render_outputs = self.render_call(
+            que_imgs_info, ref_imgs_info, is_train, src_imgs_info)
+        # render_outputs = {}
         if self.is_train_semantic is True and self.use_model not in ['unet', 'resunet']:
             sem_seg_gt = que_imgs_info['labels'].reshape(240, 320).detach().long()
             instances = Instances((240, 320))
@@ -465,7 +480,7 @@ class Renderer(BaseRenderer):
                 ).permute(0,2,3,1)
             render_outputs['pixel_label_nr'] = semantic_output
             
-        # if (self.cfg['use_depth_loss'] and 'true_depth' in ref_imgs_info) or (not is_train):
-        #     render_outputs.update(
-        #         self.predict_mean_for_depth_loss(ref_imgs_info))
+        if (self.cfg['use_depth_loss'] and 'true_depth' in ref_imgs_info) or (not is_train):
+            render_outputs.update(
+                self.predict_mean_for_depth_loss(ref_imgs_info))
         return render_outputs
