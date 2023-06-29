@@ -134,11 +134,12 @@ class RandomRendererDataset(Dataset):
         )
 
     def __len__(self):
-        return len(self.all_rgb_files)
+        return 999999
     
     def __getitem__(self, idx):
-        rgb_files = self.all_rgb_files[idx]
-        label_files = self.all_label_files[idx]
+        real_idx = idx % len(self.all_rgb_files)
+        rgb_files = self.all_rgb_files[real_idx]
+        label_files = self.all_label_files[real_idx]
         id_render = np.random.choice(np.arange(len(rgb_files)))
         rgb_file = rgb_files[id_render]
         label_file = label_files[id_render]

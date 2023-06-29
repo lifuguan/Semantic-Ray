@@ -37,7 +37,7 @@ def evaluate(net, dataloader, device, amp, losses):
 
             for loss in losses:
                 # predict the mask
-                masks_pred = net(image.permute(0,3,1,2))
+                masks_pred,_ = net(image.permute(0,3,1,2))
                 masks_pred = F.interpolate(
                     masks_pred, size=(240, 320), mode="bilinear", align_corners=False
                     ).permute(0,2,3,1)
@@ -130,7 +130,7 @@ def train_model(
                 true_masks = true_masks.to(device=device, dtype=torch.long)
 
                 with torch.autocast(device.type if device.type != 'mps' else 'cpu', enabled=amp):
-                    masks_pred = model(images.permute(0,3,1,2))
+                    masks_pred,_ = model(images.permute(0,3,1,2))
                     masks_pred = F.interpolate(
                         masks_pred, size=(240, 320), mode="bilinear", align_corners=False
                         ).permute(0,2,3,1)
